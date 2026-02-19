@@ -2,6 +2,8 @@
 
 Desktop app that imports your **Google Keep** export (Google Takeout) and visualizes your notes as **draggable sticky notes**—like a big infinite board you can rearrange.
 
+<img src="https://raw.githubusercontent.com/monapdx/keep-stickyboard/refs/heads/main/screenshot.png">
+
 ## Features
 
 - Import Google Keep exports (`.json` / `.html`) from **Google Takeout**
