@@ -13,6 +13,48 @@ const COLORS = {
   gray: true
 };
 
+// Web demo localStorage key
+const WEB_STATE_KEY = "keep_sticky_board_state_v1";
+
+// Demo notes for browser build (same shape as imported notes)
+const DEMO_NOTES = [
+  {
+    id: "demo-1",
+    title: "Welcome 👋",
+    text: "This is the *web demo* of Keep Sticky Board.\n\nDrag me by my title bar.",
+    color: "yellow",
+    labels: ["demo", "welcome"]
+  },
+  {
+    id: "demo-2",
+    title: "How it works",
+    text: "• Notes are draggable\n• Labels filter on the right\n• Search works\n\nDesktop app can import Google Keep Takeout.",
+    color: "teal",
+    labels: ["demo"]
+  },
+  {
+    id: "demo-3",
+    title: "Try links",
+    text: "Linkify test:\nhttps://github.com/monapdx/keep-stickyboard\n\n(Clicking won’t start a drag.)",
+    color: "purple",
+    labels: ["demo", "links"]
+  },
+  {
+    id: "demo-4",
+    title: "Example label",
+    text: "Click a label chip to filter.\nThen set dropdown back to ALL.",
+    color: "orange",
+    labels: ["demo", "labels"]
+  }
+];
+
+const DEMO_POSITIONS = {
+  "demo-1": { x: 70, y: 140 },
+  "demo-2": { x: 360, y: 180 },
+  "demo-3": { x: 140, y: 420 },
+  "demo-4": { x: 560, y: 360 }
+};
+
 function autoLayout(notes) {
   const cols = 6;
   const gapX = 260;
@@ -60,6 +102,29 @@ function linkifyText(text) {
   });
 }
 
+function isElectronAvailable() {
+  // Your preload exposes window.keepAPI in Electron.
+  return typeof window !== "undefined" && !!window.keepAPI;
+}
+
+function loadWebState() {
+  try {
+    const raw = localStorage.getItem(WEB_STATE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveWebState(next) {
+  try {
+    localStorage.setItem(WEB_STATE_KEY, JSON.stringify(next));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export default function App() {
   const [importInfo, setImportInfo] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -68,14 +133,38 @@ export default function App() {
   const [activeLabel, setActiveLabel] = useState("ALL");
   const saveTimer = useRef(null);
 
+  // Initial load:
+  // - Electron: load from keepAPI
+  // - Web: load from localStorage, else seed demo (optional)
   useEffect(() => {
     (async () => {
-      if (!window.keepAPI) return;
-      const res = await window.keepAPI.loadState();
-      if (res?.ok && res.data) {
-        setPositions(res.data.positions || {});
-        setImportInfo(res.data.importInfo || null);
-        setNotes(res.data.notes || []);
+      if (isElectronAvailable()) {
+        const res = await window.keepAPI.loadState();
+        if (res?.ok && res.data) {
+          setPositions(res.data.positions || {});
+          setImportInfo(res.data.importInfo || null);
+          setNotes(res.data.notes || []);
+        }
+        return;
+      }
+
+      // Web demo path
+      const web = loadWebState();
+      if (web?.notes?.length) {
+        setPositions(web.positions || {});
+        setImportInfo(web.importInfo || null);
+        setNotes(web.notes || []);
+      } else {
+        // Start the demo with a few notes so it doesn’t look empty
+        const seeded = {
+          importInfo: { folder: "(web demo)", keepDir: "(web demo)", count: DEMO_NOTES.length },
+          notes: DEMO_NOTES,
+          positions: DEMO_POSITIONS
+        };
+        setImportInfo(seeded.importInfo);
+        setNotes(seeded.notes);
+        setPositions(seeded.positions);
+        saveWebState(seeded);
       }
     })();
   }, []);
@@ -83,14 +172,17 @@ export default function App() {
   function scheduleSave(next) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      if (!window.keepAPI) return;
-      await window.keepAPI.saveState(next);
+      if (isElectronAvailable()) {
+        await window.keepAPI.saveState(next);
+      } else {
+        saveWebState(next);
+      }
     }, 250);
   }
 
   async function onImportClick() {
-    if (!window.keepAPI) {
-      alert("Import only works in the Electron app window.");
+    if (!isElectronAvailable()) {
+      alert("Import only works in the Electron desktop app.\n\nFor the web demo, use “Load Demo Notes”.");
       return;
     }
 
@@ -122,6 +214,30 @@ export default function App() {
     scheduleSave(nextState);
   }
 
+  function loadDemoBoard() {
+    const nextState = {
+      importInfo: { folder: "(web demo)", keepDir: "(web demo)", count: DEMO_NOTES.length },
+      notes: DEMO_NOTES,
+      positions: DEMO_POSITIONS
+    };
+    setImportInfo(nextState.importInfo);
+    setNotes(nextState.notes);
+    setPositions(nextState.positions);
+    scheduleSave(nextState);
+  }
+
+  function resetWebDemo() {
+    if (isElectronAvailable()) return;
+    try {
+      localStorage.removeItem(WEB_STATE_KEY);
+    } catch {}
+    setImportInfo(null);
+    setNotes([]);
+    setPositions({});
+    setQuery("");
+    setActiveLabel("ALL");
+  }
+
   const allLabels = useMemo(() => {
     const s = new Set();
     for (const n of notes) for (const l of n.labels || []) s.add(l);
@@ -151,6 +267,8 @@ export default function App() {
     scheduleSave(nextState);
   }
 
+  const showWebDemoControls = !isElectronAvailable();
+
   return (
     <div className="app">
       <header className="topbar">
@@ -166,6 +284,18 @@ export default function App() {
 
         <div className="controls">
           <button className="btn" onClick={onImportClick}>Import Keep…</button>
+
+          {showWebDemoControls ? (
+            <>
+              <button className="btn" onClick={loadDemoBoard} title="Load a sample board for the web demo">
+                Load Demo Notes
+              </button>
+              <button className="btn" onClick={resetWebDemo} title="Clear demo state (refresh to reseed)">
+                Reset Demo
+              </button>
+            </>
+          ) : null}
+
           <input
             className="search"
             placeholder="Search title or text…"
