@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("keepAPI", {
-  pickKeepFolder: () => ipcRenderer.invoke("pick-keep-folder"),
-  importKeep: (folderPath) => ipcRenderer.invoke("import-keep", folderPath),
-  loadState: () => ipcRenderer.invoke("load-state"),
-  saveState: (state) => ipcRenderer.invoke("save-state", state)
+  pickKeepFolder: () => ipcRenderer.invoke("keep:pickFolder"),
+  importKeep: (folder) => ipcRenderer.invoke("keep:import", folder),
+  loadState: () => ipcRenderer.invoke("state:load"),
+  saveState: (data) => ipcRenderer.invoke("state:save", data),
 });

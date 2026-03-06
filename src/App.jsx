@@ -28,7 +28,7 @@ const DEMO_NOTES = [
   {
     id: "demo-2",
     title: "How it works",
-    text: "• Notes are draggable\n• Labels filter on the right\n• Search works\n\nDesktop app can import Google Keep Takeout.",
+    text: "• Notes are draggable\n• Labels filter on the right\n• Search works\n• Images now render inline\n\nDesktop app can import Google Keep Takeout.",
     color: "teal",
     labels: ["demo"]
   },
@@ -45,6 +45,14 @@ const DEMO_NOTES = [
     text: "Click a label chip to filter.\nThen set dropdown back to ALL.",
     color: "orange",
     labels: ["demo", "labels"]
+  },
+  {
+    id: "demo-5",
+    title: "Image support",
+    text: "If a note includes an image field, it shows up right inside the sticky note.",
+    color: "green",
+    labels: ["demo", "images"],
+    image: "/social.png"
   }
 ];
 
@@ -52,7 +60,8 @@ const DEMO_POSITIONS = {
   "demo-1": { x: 70, y: 140 },
   "demo-2": { x: 360, y: 180 },
   "demo-3": { x: 140, y: 420 },
-  "demo-4": { x: 560, y: 360 }
+  "demo-4": { x: 560, y: 360 },
+  "demo-5": { x: 840, y: 150 }
 };
 
 function autoLayout(notes) {
@@ -123,6 +132,106 @@ function saveWebState(next) {
   } catch {
     // ignore storage failures
   }
+}
+
+function toArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function normalizeImageSrc(src) {
+  if (!src) return null;
+  const raw = String(src).trim();
+  if (!raw) return null;
+
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    raw.startsWith("file://") ||
+    raw.startsWith("/") ||
+    raw.startsWith("./") ||
+    raw.startsWith("../")
+  ) {
+    return raw;
+  }
+
+  // Windows absolute path -> file URL for Electron renderer.
+  if (/^[a-zA-Z]:[\\/]/.test(raw)) {
+    return `file:///${raw.replace(/\\/g, "/")}`;
+  }
+
+  // UNC / network path
+  if (raw.startsWith("\\\\")) {
+    return `file:${raw.replace(/\\/g, "/")}`;
+  }
+
+  return raw;
+}
+
+function getNoteImages(note) {
+  const candidates = [
+    ...toArray(note?.image),
+    ...toArray(note?.imageUrl),
+    ...toArray(note?.imagePath),
+    ...toArray(note?.thumbnail),
+    ...toArray(note?.media),
+    ...toArray(note?.attachments),
+    ...toArray(note?.images)
+  ];
+
+  const seen = new Set();
+  const output = [];
+
+  for (const item of candidates) {
+    let src = null;
+    let alt = note?.title || "Note image";
+
+    if (typeof item === "string") {
+      src = item;
+    } else if (item && typeof item === "object") {
+      src =
+        item.src ||
+        item.url ||
+        item.path ||
+        item.file ||
+        item.filePath ||
+        item.image ||
+        item.imageUrl ||
+        item.thumbnail;
+
+      alt = item.alt || item.caption || item.name || alt;
+    }
+
+    const normalized = normalizeImageSrc(src);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push({ src: normalized, alt });
+  }
+
+  return output;
+}
+
+function NoteImage({ image, title }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!image?.src || failed) return null;
+
+  return (
+    <div className="note-image-wrap">
+      <img
+        className="note-image"
+        src={image.src}
+        alt={image.alt || title || "Note image"}
+        loading="lazy"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        onClick={(e) => e.stopPropagation()}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 export default function App() {
@@ -249,7 +358,12 @@ export default function App() {
     return notes.filter((n) => {
       if (activeLabel !== "ALL" && !(n.labels || []).includes(activeLabel)) return false;
       if (!q) return true;
-      const hay = `${n.title || ""}\n${n.text || ""}`.toLowerCase();
+
+      const imageTerms = getNoteImages(n)
+        .map((img) => `${img.alt || ""} ${img.src || ""}`)
+        .join("\n");
+
+      const hay = `${n.title || ""}\n${n.text || ""}\n${imageTerms}`.toLowerCase();
       return hay.includes(q);
     });
   }, [notes, query, activeLabel]);
@@ -298,7 +412,7 @@ export default function App() {
 
           <input
             className="search"
-            placeholder="Search title or text…"
+            placeholder="Search title, text, or image name…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -315,6 +429,7 @@ export default function App() {
           const pos = positions[n.id] || { x: 60, y: 140 };
           const c = noteColor(n);
           const text = ((n.text || "").trim() || "…");
+          const images = getNoteImages(n);
 
           return (
             <Draggable
@@ -323,12 +438,20 @@ export default function App() {
               onStop={(_, data) => updatePosition(n.id, data.x, data.y)}
               handle=".note-header"
             >
-              <div className={`note note-${c}`}>
+              <div className={`note note-${c} ${images.length ? "note-has-image" : ""}`}>
                 <div className="note-header">
                   <div className="note-title">{n.title || "(untitled)"}</div>
                 </div>
 
                 <div className="note-body">
+                  {images.length ? (
+                    <div className="note-images">
+                      {images.map((image) => (
+                        <NoteImage key={image.src} image={image} title={n.title} />
+                      ))}
+                    </div>
+                  ) : null}
+
                   <div className="note-text">{linkifyText(text)}</div>
                 </div>
 
