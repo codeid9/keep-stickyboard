@@ -83,6 +83,25 @@ function autoLayout(notes) {
   return positions;
 }
 
+function highlightSearchMatches(content, query) {
+  if (!query || !query.trim()) return content;
+
+  const q = query.trim();
+  // String check aur safe conversion
+  const input = String(content ?? "");
+  const parts = input.split(new RegExp(`(${q})`, "gi"));
+
+  return parts.map((part, i) =>
+    part.toLowerCase() === q.toLowerCase() ? (
+      <mark key={i} className="search-highlight">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
 function linkifyText(text) {
   const input = String(text ?? "");
   const urlRegex = /((https?:\/\/|www\.)[^\s<>()]+[^\s<>().,!?;:"')\]])/gi;
@@ -440,7 +459,7 @@ export default function App() {
             >
               <div className={`note note-${c} ${images.length ? "note-has-image" : ""}`}>
                 <div className="note-header">
-                  <div className="note-title">{n.title || "(untitled)"}</div>
+                <div className="note-title">{highlightSearchMatches(n.title || "(untitled)", query)}</div>
                 </div>
 
                 <div className="note-body">
@@ -452,7 +471,7 @@ export default function App() {
                     </div>
                   ) : null}
 
-                  <div className="note-text">{linkifyText(text)}</div>
+                <div className="note-text">{highlightSearchMatches(linkifyText(text), query)}</div>
                 </div>
 
                 {(n.labels?.length || 0) > 0 ? (
