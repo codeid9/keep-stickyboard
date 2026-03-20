@@ -260,6 +260,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [activeLabel, setActiveLabel] = useState("ALL");
   const saveTimer = useRef(null);
+  const [zoom, setZoom] = useState(1);
 
   // Initial load:
   // - Electron: load from keepAPI
@@ -441,9 +442,11 @@ export default function App() {
             ))}
           </select>
         </div>
-      </header>
-
-      <div className="board">
+      </header>      
+      <div className="board" style={{
+        transform: `scale(${zoom})`, 
+        transformOrigin: '1'
+      }}>
         {filtered.map((n) => {
           const pos = positions[n.id] || { x: 60, y: 140 };
           const c = noteColor(n);
@@ -488,6 +491,12 @@ export default function App() {
           );
         })}
       </div>
+      {/* Zoom in/out */}
+        <div className="zoom-controls">
+          <button onClick={() => setZoom(prev => Math.min(prev + 0.1, 2))}>+</button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(prev => Math.max(prev - 0.1, 0.5))}>-</button>
+        </div>
     </div>
   );
 }
